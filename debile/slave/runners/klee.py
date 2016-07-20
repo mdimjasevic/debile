@@ -28,14 +28,16 @@ import os
 from schroot import schroot
 
 
-def chroot_cmd_sequence(chroot, cmds):
+def chroot_cmd_sequence(chroot, cmds, preserve_environment=False):
     out_ = ""
     err_ = ""
     for cmd in cmds:
         if cmd[0] == 'root':
-            out, err, ret = chroot.run(cmd[1], user='root')
+            out, err, ret = chroot.run(cmd[1], user='root',
+                                preserve_environment=preserve_environment)
         else:
-            out, err, ret = chroot.run(cmd[1])
+            out, err, ret = chroot.run(cmd[1],
+                                preserve_environment=preserve_environment)
         out_ += out
         err_ += err
         if ret:
@@ -44,7 +46,6 @@ def chroot_cmd_sequence(chroot, cmds):
     return out_, err_, 0
 
 def install_llvm(chroot, llvm_ver):
-
     return chroot_cmd_sequence(chroot,
             [['root', ['apt-get', 'install', '--yes',
                        'clang-%s' % llvm_ver,
@@ -70,12 +71,14 @@ def install_wllvm(chroot, directory):
         ['root', ['apt-get', 'install', '--yes',
                   'wget', 'unzip', 'ca-certificates', 'rsync']],
         ['', ['wget',
-              'https://github.com/travitch/whole-program-llvm/archive/master.zip',
+              'https://github.com/travitch/whole-program-llvm/archive/' +
+              'master.zip',
               '-O', archive]],
         ['', ['unzip', archive, '-d', tmp_dir]]
     ]
     wllvm_cmds_2 = [
-        ['root', ['rsync', '-a', tmp_dir + '/whole-program-llvm-master/' + wllvm_file,
+        ['root', ['rsync', '-a', tmp_dir + '/whole-program-llvm-master/' +
+                  wllvm_file,
                   directory + "/"]]
         for wllvm_file in ['driver',
                                     'sanity', 'extract-bc', 'wllvm',
@@ -119,7 +122,6 @@ def install_wllvm(chroot, directory):
             wllvm_cmds + gcc_cmds + rm_cmds + ln_cmds + dpkg_hold_cmds)
 
 def install_klee(chroot):
-
     stp_pkg  = "stp_2.1.1+dfsg-1_amd64.deb"
     stp_pkg_path = "/tmp/" + stp_pkg
     klee_pkg = "klee_1.2.0-1_amd64.deb"
@@ -139,6 +141,95 @@ def install_klee(chroot):
 
     return chroot_cmd_sequence(chroot, cmds)
 
+def install_custom_dh_auto_configure(chroot):
+    wrapper = """
+#!/bin/bash
+dpkg-buildflags --export
+WLLVM_CONFIGURE_ONLY=1 /usr/bin/dh_auto_configure "$@"
+    """
+    file_path = '/usr/local/bin/dh_auto_configure'
+    with chroot.create_file(file_path, user='root') as dh_auto_configure_file:
+        dh_auto_configure_file.write(wrapper)
+    return chroot.run(['chmod', '+x', file_path], user='root')
+
+def set_env_vars(chroot, llvm_ver):
+    # Build flags. LLVM 3.4 doesn't support -fstack-protector-strong
+    strip_flags = "-fstack-protector-strong -O2"
+    os.environ['DEB_CFLAGS_STRIP']    = strip_flags
+    os.environ['DEB_CXXFLAGS_STRIP']  = strip_flags
+    os.environ['DEB_OBJCFLAGS_STRIP'] = strip_flags
+    os.environ['DEB_CFLAGS_STRIP']    = strip_flags
+    # WLLVM-specific flags
+    os.environ['LLVM_VERSION'] = llvm_ver
+    os.environ['LLVM_COMPILER'] = 'clang'
+    os.environ['LLVM_COMPILER_PATH'] = '/usr/lib/llvm-%s/bin' % llvm_ver
+    # Avoid running tests as those might take too much time
+    os.environ['DEB_BUILD_OPTIONS'] = 'nocheck'
+    # Override default compilers
+    os.environ['CC'] = 'wllvm'
+    os.environ['CXX'] = 'wllvm++'
+
+    # return chroot_cmd_sequence(chroot, [
+    #     ['', ['printenv']]
+    # ], preserve_environment=True)
+
+def set_up_session(chroot):
+    bin_dir = '/usr/bin'
+    out_ = ""
+    err_ = ""
+
+    # Because LLVM 3.4 is not available as of Debian Stretch, but only
+    # versions 3.6 and higher, we use snapshot.debian.org to install
+    # LLVM
+    sources_list_path = '/etc/apt/sources.list'
+    out, err, ret = chroot.run(['sh', '-c',
+                                'echo deb http://snapshot.debian.org/' +
+                                'archive/debian/20160707T223519Z/ ' +
+                                'jessie main >> ' + sources_list_path],
+                               user='root')
+    if ret:
+        raise Exception(err)
+    out_ += out
+    err_ += err
+
+    out, err, ret = chroot.run(['apt-get', 'update'], user='root')
+    if ret:
+        raise Exception(err)
+    out_ += out
+    err_ += err
+
+    # Install Clang and LLVM packages needed for KLEE
+    llvm_ver = '3.4'
+    out, err, ret = install_llvm(chroot, llvm_ver)
+    if ret:
+        raise Exception(err)
+    out_ += out
+    err_ += err
+
+    # Install WLLVM
+    out, err, ret = install_wllvm(chroot, bin_dir)
+    if ret:
+        raise Exception(err)
+    out_ += out
+    err_ += err
+
+    # Install KLEE and its dependencies
+    out, err, ret = install_klee(chroot)
+    if ret:
+        raise Exception(err)
+    out_ += out
+    err_ += err
+
+    out, err, ret = install_custom_dh_auto_configure(chroot)
+    if ret:
+        raise Exception(err)
+    out_ += out
+    err_ += err
+
+    set_env_vars(chroot, llvm_ver)
+
+    return out_, err_, 0
+
 def klee(package, suite, arch, analysis):
     chroot_name = "%s-%s" % (suite, arch)
 
@@ -151,52 +242,9 @@ def klee(package, suite, arch, analysis):
         if not dsc.endswith('.dsc'):
             raise ValueError("KLEE runner must receive a .dsc file")
 
-        bin_dir = '/usr/bin'
-        out_ = ""
-        err_ = ""
+        err, out, ret = set_up_session(chroot)
 
-        # Because LLVM 3.4 is not available as of Debian Stretch, but
-        # only versions 3.6 and higher, we use snapshot.debian.org to
-        # install LLVM
-        sources_list_path = '/etc/apt/sources.list'
-        out, err, ret = chroot.run(['sh', '-c',
-                                    'echo deb http://snapshot.debian.org/' +
-                                    'archive/debian/20160707T223519Z/ ' +
-                                    'jessie main >> ' + sources_list_path],
-                                   user='root')
-        if ret:
-            raise Exception(err)
-        out_ += out
-        err_ += err
-
-        out, err, ret = chroot.run(['apt-get', 'update'], user='root')
-        if ret:
-            raise Exception(err)
-        out_ += out
-        err_ += err
         
-        # Install Clang and LLVM packages needed for KLEE
-        llvm_ver = '3.4'
-        out, err, ret = install_llvm(chroot, llvm_ver)
-        if ret:
-            raise Exception(err)
-        out_ += out
-        err_ += err
-
-        # Install WLLVM
-        out, err, ret = install_wllvm(chroot, bin_dir)
-        if ret:
-            raise Exception(err)
-        out_ += out
-        err_ += err
-
-        # Install KLEE and its dependencies
-        out, err, ret = install_klee(chroot)
-        if ret:
-            raise Exception(err)
-        out_ += out
-        err_ += err
-
     # Run the build process for the package given by the dsc
     # parameter. That will use WLLVM (with Clang) instead of the usual
     # GCC.
