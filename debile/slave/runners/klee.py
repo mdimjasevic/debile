@@ -242,24 +242,28 @@ def klee(package, suite, arch, analysis):
         if not dsc.endswith('.dsc'):
             raise ValueError("KLEE runner must receive a .dsc file")
 
-        err, out, ret = set_up_session(chroot)
+        out, err, ret = set_up_session(chroot)
 
+        out_, err_, _ = run_command([
+            'sbuild',
+            # KLEE works on amd64 only as of July 2016
+            '--arch', arch,
+            # The --use-schroot-session option is available in a
+            # custom version of sbuild via a patch by Léo Cavaillé
+            # available in
+            # contrib/debian/support-for-schroot-sessions.patch.
+            '--use-schroot-session', chroot.session,
+            '--verbose',
+            '--dist', suite,
+            '--jobs', "8",
+            package
+        ])
+
+        out += out_
+        err += err_
         
-    # Run the build process for the package given by the dsc
-    # parameter. That will use WLLVM (with Clang) instead of the usual
-    # GCC.
-    #
-    # I cannot run dpkg-buildpackage directly. I need to do something
-    # on the .dsc file. Probably I need to run dpkg -b dsc. See
-    # runners/clanganalyzer.py for an example of building a package
-    # in an schroot.
-    #
-    # _, err, ret = run_command(["dpkg-buildpackage", "-us", "-uc"])
-    # if ret != 0:
-    #     raise Exception("Package building failed: " + err)
-
-    # See how to set up an sbuild environment for KLEE
-
+        # Now find all ELF files like in pbuilder hook-scripts and run
+        # KLEE on corresponding LLVM IR files
 def version():
     out, _, ret = run_command(['klee', '-version'])
     if ret != 1:
