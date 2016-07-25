@@ -5,7 +5,7 @@ Description: Allow reusing existing schroot session
  This is based on Léo Cavaillé's earlier patch for sbuild 0.64.1, but
  rebased on sbuild 0.69.0.
 Origin: http://leo.cavaille.net/public/gsoc/sbuild-patches/0001-Added-support-for-schroot-sessions.patch
-Author: Marko Dimjašević <marko@dimjasevic.net>
+Author: Marko Dimjašević <marko@dimjasevic.net>, Léo Cavaillé <leo@cavaille.net>
 
 --- sbuild-0.69.0.orig/lib/Sbuild/ChrootInfoSchroot.pm
 +++ sbuild-0.69.0/lib/Sbuild/ChrootInfoSchroot.pm
