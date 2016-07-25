@@ -1,11 +1,10 @@
-Description: Allow reusing existing session.
-The user can, with the --use-schroot-session, provide an existing
-schroot session ID and the sbuild will run using this same session
-not creating a new one.
-This is based on Léo Cavaillé's earlier patch for sbuild 0.64.1, but
-rebased on sbuild 0.69.0:
-http://leo.cavaille.net/public/gsoc/sbuild-patches/0001-Added-support-for-schroot-sessions.patch
-
+Description: Allow reusing existing schroot session
+ The user can, with the --use-schroot-session, provide an existing
+ schroot session ID and sbuild will run using this same session not
+ creating a new one.
+ This is based on Léo Cavaillé's earlier patch for sbuild 0.64.1, but
+ rebased on sbuild 0.69.0.
+Origin: http://leo.cavaille.net/public/gsoc/sbuild-patches/0001-Added-support-for-schroot-sessions.patch
 Author: Marko Dimjašević <marko@dimjasevic.net>
 
 --- sbuild-0.69.0.orig/lib/Sbuild/ChrootInfoSchroot.pm
