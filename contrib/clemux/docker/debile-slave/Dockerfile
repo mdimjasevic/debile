@@ -15,15 +15,18 @@ COPY *.deb /tmp/
 
 WORKDIR /tmp
 
-RUN apt-get update && apt-get install -y python python-dput dput-ng python-firehose adduser python-debian python-requests python-yaml python-schroot wget
+RUN apt-get update && apt-get install -y python python-dput dput-ng python-firehose adduser python-debian python-requests python-yaml python-schroot
 
 # Use a custom version of sbuild written by Léo Cavaillé that adds an
 # option --use-schroot-session, which enables starting sbuild with an
 # existing schroot session.
-RUN wget https://dimjasevic.net/marko/debile/libsbuild-perl_0.69.0-2_all.deb
-RUN wget https://dimjasevic.net/marko/debile/sbuild_0.69.0-2_all.deb
-RUN (dpkg --install libsbuild-perl_0.69.0-2_all.deb || true)
-RUN (dpkg --install sbuild_0.69.0-2_all.deb || true)
+RUN apt-get build-dep --assume-yes sbuild
+RUN apt-get source sbuild
+COPY support-for-schroot-sessions.patch /tmp/
+RUN cd sbuild-* && cp ../support-for-schroot-sessions.patch . && \
+    patch -p1 < ../support-for-schroot-sessions.patch && \
+    dpkg-buildpackage -us -uc -nc
+RUN (dpkg --install *sbuild*.deb || true)
 RUN apt-get --assume-yes --fix-broken install
 
 RUN dpkg -i python-debile*.deb debile-slave*.deb
