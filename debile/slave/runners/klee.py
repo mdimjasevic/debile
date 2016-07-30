@@ -230,6 +230,32 @@ def set_up_session(chroot):
 
     return out_, err_, 0
 
+def install_binary_packages(chroot, package):
+    """Installs all the binary packages that this source package builds"""
+
+    with open(package) as dsc:
+        for line in dsc.read().split('\n'):
+            if line.startswith("Binary: "):
+                pkgs_str = line[len("Binary: "):].replace(", ", " ")
+                break
+
+    return chroot.run(
+        ['sh', '-c', 'apt-get install --yes ' + pkgs_str],
+        user='root'
+    )
+
+def extract_llvm_ir(chroot, deb_tmp_dir):
+    """
+    Finds all ELF files resulting from the source package build that are
+    programs and tries to extract LLVM bitcode from them
+    """
+
+    out_, err_, ret_ = chroot.run([
+        'find', '/var/lib/sbuild', '-name', '*.deb'
+    ], user='root')
+    print out_
+    pass
+
 def klee(package, suite, arch, analysis):
     chroot_name = "%s-%s" % (suite, arch)
 
@@ -243,6 +269,13 @@ def klee(package, suite, arch, analysis):
             raise ValueError("KLEE runner must receive a .dsc file")
 
         out, err, ret = set_up_session(chroot)
+
+        out_, err_, ret_ = chroot.run([
+            'mktemp', '--directory'
+        ])
+        if ret_:
+            return out_, err_, ret_
+        deb_tmp_dir = out_.strip()
 
         out_, err_, _ = run_command([
             'sbuild',
@@ -258,12 +291,23 @@ def klee(package, suite, arch, analysis):
             '--jobs', "8",
             package
         ])
-
         out += out_
         err += err_
-        
+
+        # Install binary packages that the source package builds
+        out_, err_, ret_ = install_binary_packages(chroot, package)
+        if ret_ != 0:
+            raise Exception(err_)
+        out += out_
+        err += err_
+
         # Now find all ELF files like in pbuilder hook-scripts and run
         # KLEE on corresponding LLVM IR files
+        extract_llvm_ir(chroot, deb_tmp_dir)
+
+        # Clean up a temporary directory
+        _, _, _ = chroot.run(['rm', '-rf', deb_tmp_dir])
+
 def version():
     out, _, ret = run_command(['klee', '-version'])
     if ret != 1:
