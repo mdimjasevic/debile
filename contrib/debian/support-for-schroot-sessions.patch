@@ -32,17 +32,17 @@ Author: Marko Dimjašević <marko@dimjasevic.net>, Léo Cavaillé <leo@cavaille.
  
 --- sbuild-0.69.0.orig/lib/Sbuild/Conf.pm
 +++ sbuild-0.69.0/lib/Sbuild/Conf.pm
-@@ -131,7 +131,24 @@ sub setup ($) {
-   	    GROUP => 'Chroot options',
-   	    DEFAULT => undef,
-	    HELP => 'Default chroot (defaults to distribution[-arch][-sbuild])',
+@@ -131,7 +131,25 @@ sub setup ($) {
+ 	    GROUP => 'Chroot options',
+ 	    DEFAULT => undef,
+ 	    HELP => 'Default chroot (defaults to distribution[-arch][-sbuild])',
 -	    CLI_OPTIONS => ['-c', '--chroot']
 +	    CLI_OPTIONS => ['-c', '--chroot'],
-+            CHECK => sub {
-+                if (defined $conf->get('USE_SCHROOT_SESSION')){
-+                    warn  "W: Option -c/--chroot will be ignored with --use-schroot-session";
-+                }
-+            }
++	    CHECK => sub {
++		if (defined $conf->get('USE_SCHROOT_SESSION')){
++		    warn  "W: Option -c/--chroot will be ignored with --use-schroot-session";
++		}
++	    }
 +	},
 +	'USE_SCHROOT_SESSION'		    	=> {
 +	    TYPE => 'STRING',
@@ -50,11 +50,12 @@ Author: Marko Dimjašević <marko@dimjasevic.net>, Léo Cavaillé <leo@cavaille.
 +	    GROUP => 'Chroot options',
 +	    DEFAULT => undef,
 +	    HELP => 'Rather than creating a session internally, use a given session',
-+            CHECK => sub {
-+                if (defined $conf->get('CHROOT')){
-+                    warn  "W: Option -c/--chroot will be ignored with --use-schroot-session";
-+                }
-+            }
++	    CLI_OPTIONS => ['--use-schroot-session'],
++	    CHECK => sub {
++		if (defined $conf->get('CHROOT')){
++		    warn  "W: Option -c/--chroot will be ignored with --use-schroot-session";
++		}
++	    }
  	},
  	'BUILD_ARCH_ALL'			=> {
  	    TYPE => 'BOOL',
