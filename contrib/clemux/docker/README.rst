@@ -21,6 +21,13 @@ already setup to use apt-cacher.
 Otherwise, you'll need to edit the ``sources.list`` files to use the
 mirror of your choosing.
 
+Copy a patch for sbuild from
+``contrib/debian/support-for-schroot-sessions.patch`` to enable using an
+schroot session in sbuild. When in the root of the Debile repository,
+run:
+
+$ cp contrib/debian/support-for-schroot-sessions.patch contrib/clemux/docker/debile-slave/
+
 Docker runs as root, and the ``docker`` CLI program will need access
 to docker's unix socket. If you don't want to run ``docker`` as root,
 you can add your user to the group ``docker``:
