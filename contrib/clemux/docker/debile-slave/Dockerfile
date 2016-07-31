@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y python python-dput dput-ng python-fireh
 RUN apt-get build-dep --assume-yes sbuild
 RUN apt-get source sbuild
 COPY support-for-schroot-sessions.patch /tmp/
-RUN cd sbuild-* && cp ../support-for-schroot-sessions.patch . && \
+RUN cd sbuild-* && \
     patch -p1 < ../support-for-schroot-sessions.patch && \
     dpkg-buildpackage -us -uc -nc
 RUN (dpkg --install *sbuild*.deb || true)
