@@ -250,11 +250,88 @@ def extract_llvm_ir(chroot, deb_tmp_dir):
     programs and tries to extract LLVM bitcode from them
     """
 
+    out = ''
+    err = ''
+
+    bc_list_file = os.path.join(deb_tmp_dir, 'bc-files')
+    out_, err_, ret_ = chroot.run(['rm', '--force', bc_list_file])
+    if ret_ != 0:
+        raise Exception(err_)
+    out += out_
+    err += err_
+
     out_, err_, ret_ = chroot.run([
         'find', '/var/lib/sbuild', '-name', '*.deb'
     ], user='root')
-    print out_
-    pass
+    if ret_ != 0:
+        raise Exception(err_)
+    out += out_
+    err += err_
+
+    debs = out_.strip().split("\n")
+    for pkg in debs:
+        out_, err_, ret_ = chroot.run(['dpkg', '--extract', pkg, deb_tmp_dir])
+        if ret_ != 0:
+            raise Exception(err_)
+        out += out_
+        err += err_
+
+    bc_dir = deb_tmp_dir + '/bc-files'
+    _, err_, ret_ = chroot.run(['mkdir', bc_dir])
+    if ret_ != 0:
+        raise Exception(err_)
+
+    out_, err_, ret_ = chroot.run(['find', deb_tmp_dir, '-type', 'f'])
+    if ret_ != 0:
+        raise Exception(err_)
+    out += out_
+    err += err_
+
+    for f in out_.strip().split("\n"):
+        out_, err_, ret_ = chroot.run(['file', f])
+        if ret_ != 0:
+            raise Exception(err_)
+        out += out_
+        err += err_
+
+        # We need only ELF executables
+        file_type_info = out_.strip().split(" ")
+        if file_type_info[1] != 'ELF' or
+        !file_type_info[4].startswith('executable'):
+            continue
+
+        # Check if the ELF file has an llvm_bc section
+        out_, err_, ret_ = chroot.run([
+            'sh', '-c', 'objdump -h ' + f + ' | grep \.llvm_bc'])
+        if ret_ != 0:
+            raise Exception(err_)
+        out += out_
+        err += err_
+
+        # If the file does not have the llvm_bc section, skip it
+        if out_.strip() == '':
+            continue
+
+        dir_name, base_name = os.path.split(f)
+        output_file = os.path.join(bc_dir, base_name)
+        out_, err_, ret_ = chroot.run([
+            'sh', '-c', 'cd ' + dir_name + ' && ' +
+            'extract-bc --output ' + output_file + ' ' + base_name
+        ], preserve_environment=True)
+        out += out_
+        err += err_
+
+        # Check if bitcode extraction was successful
+        if ret_ == 0:
+            out_, err_, ret_ = chroot.run([
+                'sh', '-c', 'echo ' + output_file + ' >> ' + bc_list_file
+            ])
+            if ret_ != 0:
+                raise Exception(err_)
+            out += out_
+            err += err_
+
+    return out, err, 0
 
 def klee(package, suite, arch, analysis):
     chroot_name = "%s-%s" % (suite, arch)
@@ -301,9 +378,13 @@ def klee(package, suite, arch, analysis):
         out += out_
         err += err_
 
-        # Now find all ELF files like in pbuilder hook-scripts and run
-        # KLEE on corresponding LLVM IR files
-        extract_llvm_ir(chroot, deb_tmp_dir)
+        # Extract LLVM IR code based on the llvm_bc section in ELF
+        # executables
+        out_, err_, ret_ = extract_llvm_ir(chroot, deb_tmp_dir)
+        if ret_ != 0:
+            raise Exception(err_)
+        out += out_
+        err += err_
 
         # Clean up a temporary directory
         _, _, _ = chroot.run(['rm', '-rf', deb_tmp_dir])
