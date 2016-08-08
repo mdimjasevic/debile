@@ -42,6 +42,7 @@ PLUGINS = {
     "piuparts": "debile.slave.commands.piuparts",
     "desktop-file-validate": "debile.slave.commands.desktop_file_validate",
     "honorcxx": "debile.slave.commands.honorcxx",
+    "klee": "debile.slave.commands.klee",
 }
 
 

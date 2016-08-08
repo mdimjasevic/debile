@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2016 Marko Dimjašević <marko@dimjasevic.net>
-# Copyright (c) 2012-2013 Paul Tagliamonte <paultag@debian.org>
-# Copyright (c) 2013 Leo Cavaille <leo@cavaille.net>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -21,8 +19,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from debile.slave.wrappers.klee import parse_klee
 from debile.utils.commands import run_command
+import firehose.model
 
 import os
 from schroot import schroot
@@ -331,9 +329,78 @@ def extract_llvm_ir(chroot, deb_tmp_dir):
             out += out_
             err += err_
 
-    return out, err, 0
+    return out, err, 0, bc_list_file
 
-def klee(package, suite, arch, analysis):
+def call_klee_on_bc(chroot, bc_list_file, pkg_name):
+    """Calls KLEE on every generated LLVM IR/bitcode file"""
+
+    # maximum per-program analysis time in seconds
+    max_per_program_analysis_time = 30
+
+    # maximium size of an argument in bytes
+    sym_arg_size = 3
+
+    # List of output directories
+    out_dirs = []
+
+    out = ''
+    err = ''
+
+    bc_files, err_, ret_ = chroot.run(['cat', bc_list_file])
+    if ret_ != 0:
+        raise Exception(err_)
+    out += bc_files
+    err += err_
+
+    counter = 0
+    for prog in bc_files.strip().split("\n"):
+        dir_name, base_name = os.path.split(prog)
+        klee_out = "/tmp/%s-%d-%s" % (pkg_name, counter, base_name)
+
+        out_, err_, _ = chroot.run([
+            'sh', '-c',
+            " ".join([
+                'cd', dir_name,
+                '&&',
+                'klee',
+                '-output-dir=' + klee_out,
+                '-max-time=' + per_program_max_analysis_time,
+                '-readable-posix-inputs',
+                '-libc=uclibc',
+                '--posix-runtime',
+                '--only-output-states-covering-new',
+                '-firehose-output',
+                base_name,
+                '--sym-arg', str(sym_arg_size)
+            ])
+        ])
+        out += out_
+        err += err_
+
+        counter += 1
+
+    return out, err, out_dirs
+
+def combine_results(chroot, res_dirs, analysis_):
+    """
+    Combines results of analysing every program from the package into a
+    single analysis file.
+
+    """
+
+    analysis = analysis_
+    for dir in res_dirs:
+        report = os.path.join(dir, "firehose.xml")
+        if !os.path.isfile(report):
+            continue
+
+        prog_analysis = Analysis.from_xml(report)
+        for result in prog_analysis.results:
+            analysis.results.append(result)
+
+    return analysis
+
+def klee(package, suite, arch, analysis_):
     chroot_name = "%s-%s" % (suite, arch)
 
     # At the moment KLEE can be run on amd64 only
@@ -354,7 +421,7 @@ def klee(package, suite, arch, analysis):
             return out_, err_, ret_
         deb_tmp_dir = out_.strip()
 
-        out_, err_, _ = run_command([
+        out_, err_, ret = run_command([
             'sbuild',
             # KLEE works on amd64 only as of July 2016
             '--arch', arch,
@@ -368,6 +435,11 @@ def klee(package, suite, arch, analysis):
             '--jobs', "8",
             package
         ])
+        if ret != 0:
+            Failed = True
+        else:
+            Failed = False
+
         out += out_
         err += err_
 
@@ -380,14 +452,23 @@ def klee(package, suite, arch, analysis):
 
         # Extract LLVM IR code based on the llvm_bc section in ELF
         # executables
-        out_, err_, ret_ = extract_llvm_ir(chroot, deb_tmp_dir)
+        out_, err_, ret_, bc_list_file = extract_llvm_ir(chroot, deb_tmp_dir)
         if ret_ != 0:
             raise Exception(err_)
         out += out_
         err += err_
 
+        # Run KLEE on all generated LLVM IR files
+        out_, err_, res_dirs = call_klee_on_bc(
+            chroot, bc_list_file, dsc.split(".dsc")[1])
+
+        # Combine all results into a single Firehose XML file
+        analysis = combine_results(res_dirs, analysis_)
+
         # Clean up a temporary directory
         _, _, _ = chroot.run(['rm', '-rf', deb_tmp_dir])
+
+        return (analysis, out, Failed, None, None)
 
 def version():
     out, _, ret = run_command(['klee', '-version'])

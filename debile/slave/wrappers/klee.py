@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # Copyright (c) 2016 Marko Dimjašević <marko@dimjasevic.net>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
@@ -18,17 +19,6 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-from debile.slave.runners.klee import klee, version
 
-
-def run(dsc, package, job, firehose):
-    suite = job['suite']
-    arch = package['affinity']
-
-    updated_firehose, out, failed, changes, files = klee(
-        dsc, suite, arch, firehose)
-
-    return (updated_firehose, out, failed, changes, files)
-
-def get_version():
-    return version()
+# Nothing to do here as KLEE natively outputs results in the Firehose
+# format when provided with the -firehose-output argument flag.
