@@ -295,7 +295,7 @@ def extract_llvm_ir(chroot, deb_tmp_dir):
         # We need only ELF executables
         file_type_info = out_.strip().split(" ")
         if file_type_info[1] != 'ELF' or
-        !file_type_info[4].startswith('executable'):
+        not file_type_info[4].startswith('executable'):
             continue
 
         # Check if the ELF file has an llvm_bc section
@@ -391,7 +391,7 @@ def combine_results(chroot, res_dirs, analysis_):
     analysis = analysis_
     for dir in res_dirs:
         report = os.path.join(dir, "firehose.xml")
-        if !os.path.isfile(report):
+        if not os.path.isfile(report):
             continue
 
         prog_analysis = Analysis.from_xml(report)
