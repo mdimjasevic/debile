@@ -294,8 +294,8 @@ def extract_llvm_ir(chroot, deb_tmp_dir):
 
         # We need only ELF executables
         file_type_info = out_.strip().split(" ")
-        if file_type_info[1] != 'ELF' or
-        not file_type_info[4].startswith('executable'):
+        if file_type_info[1] != 'ELF' or not (
+                file_type_info[4].startswith('executable')):
             continue
 
         # Check if the ELF file has an llvm_bc section
