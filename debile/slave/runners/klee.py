@@ -122,14 +122,14 @@ def install_wllvm(chroot, directory):
 def install_klee(chroot):
     stp_pkg  = "stp_2.1.1+dfsg-1_amd64.deb"
     stp_pkg_path = "/tmp/" + stp_pkg
-    klee_pkg = "klee_1.2.0-1_amd64.deb"
+    klee_pkg = "klee_1.2.0-firehose-1_amd64.deb"
     klee_pkg_path = "/tmp/" + klee_pkg
     url_dir  = "https://dimjasevic.net/marko/klee"
     cmds = [
         ['root', ['apt-get', 'install', '--yes',
                   'libboost-program-options1.55.0', 'libgcc1', 'libstdc++6',
                   'minisat', 'libcap2', 'libffi6', 'libtinfo5', 'python',
-                  'python-tabulate']],
+                  'libllvm3.4', 'python-tabulate']],
         ['', ['wget', '%s/%s' % (url_dir, stp_pkg), '-O', stp_pkg_path]],
         ['', ['wget', '%s/%s' % (url_dir, klee_pkg), '-O', klee_pkg_path]],
         ['root', ['dpkg', '--install', stp_pkg_path]],
